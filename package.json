@@ -1,0 +1,20 @@
+{
+  "name": "",
+  "version": "1.0.0",
+  "description": "",
+  "devDependencies": {
+    "web3": "^0.18.2",
+    "toml": "^2.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "/issues"
+  },
+  "homepage": "#README"
+}
