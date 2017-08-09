@@ -5,7 +5,7 @@
       "params": {
         "gasLimitBoundDivisor": "0x400",
         "stepDuration": "5",
-        "blockReward": "0x4563918244F40000",
+        "blockReward": "0xDE0B6B3A7640000",
         "validators": {
           "safeContract": "0xf472e0e43570b9afaab67089615080cf7c20018d"
         }
