@@ -33,7 +33,7 @@ function findKeys(specData, cb) {
 function retrievePayoutKey(specData, tomlData, miningKey, cb) {
 	attachToContract(specData, tomlData, function(err, web3, contract) {
 		contract.miningPayoutKeysPair.call(miningKey, function(err, payoutKey) {
-			console.log(err);
+			if (err) console.log(err);
 			cb(payoutKey);
 		});
 	});
