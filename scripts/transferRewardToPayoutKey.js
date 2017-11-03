@@ -50,7 +50,7 @@ function transferRewardToPayoutKeyInner(specData, tomlData, miningKey, payoutKey
 	  			return;
 	  		}
 
-	  		console.log("Reward is sent to payout key (0x" + payoutKey + ") from mining key (0x" + miningKey + ")");
+	  		console.log("Reward is sent to payout key (" + payoutKey + ") from mining key (" + miningKey + ")");
 	  	});
   	});
 };
@@ -79,7 +79,7 @@ function attachToContract(specData, tomlData, cb) {
 		if (err) return console.log(err);
 
 		var contractABI = config.Ethereum.contracts.Oracles.abi;
-		var contractAddress = specData.engine.authorityRound.params.validators.contract;
+		var contractAddress = specData.engine.authorityRound.params.validators.safeContract;
 
 		var MyContract = web3.eth.contract(contractABI);
 
