@@ -14,7 +14,7 @@ function transferRewardToPayoutKey() {
 	findKeys(specData, function(tomlData, miningKey, payoutKey) {
 		console.log("miningKey = " + miningKey);
 		console.log("payoutKey = " + payoutKey);
-		if (!miningKey || !payoutKey)
+		if (!miningKey || !payoutKey || payoutKey == "0x0000000000000000000000000000000000000000")
 			return console.log({code: 500, title: "Error", message: "Payout key or mining key or both are undefined"});
 		transferRewardToPayoutKeyInner(specData, tomlData, miningKey, payoutKey);
 	});
@@ -97,7 +97,7 @@ function transferRewardToPayoutKeyTX(web3, _from, _to, cb) {
 	var estimatedGas = web3.eth.estimateGas({from: _from, to: _to, value: balance});
 	console.log("estimated gas: " + estimatedGas);
 	var ammountToSend = balance - estimatedGas * gasPrice;
-	console.log("ammount to transfer: " + ammountToSend);
+	console.log("amount to transfer: " + ammountToSend);
 	web3.eth.sendTransaction({gas: estimatedGas, from: _from, to: _to, value: ammountToSend}, function(err, result) {
 		cb(err, result);
 	});
