@@ -26,8 +26,10 @@ function findKeys(cb) {
 function findKeysCallBack(web3, miningKey, payoutKey) {
 	console.log("miningKey = " + miningKey);
 	console.log("payoutKey = " + payoutKey);
-	if (!miningKey || !payoutKey || payoutKey == "0x0000000000000000000000000000000000000000")
-		return console.log({code: 500, title: "Error", message: "Payout key or mining key or both are undefined"});
+	if (!miningKey || !payoutKey || payoutKey == "0x0000000000000000000000000000000000000000") {
+		var err = {code: 500, title: "Error", message: "Payout key or mining key or both are undefined"};
+		return finishScript(err);
+	}
 	transferRewardToPayoutKeyTX(web3, miningKey, payoutKey);
 }
 
@@ -50,20 +52,24 @@ function getConfig() {
 	return config;
 }
 
-async function configureWeb3(miningKey, cb) {
+function configureWeb3(miningKey, cb) {
 	var web3;
 	if (typeof web3 !== 'undefined') web3 = new Web3(web3.currentProvider);
 	else web3 = new Web3(new Web3.providers.HttpProvider(config.Ethereum[config.environment].rpc));
 
-	let isListening = await web3.eth.net.isListening();
+	if (!web3) return finishScript(err);
+	
+	web3.eth.net.isListening().then(function(isListening) {
+		if (!isListening) {
+			var err = {code: 500, title: "Error", message: "check RPC"};
+			return finishScript(err);
+		}
 
-	if (!isListening) {
-		var err = {code: 500, title: "Error", message: "check RPC"};
-		cb(err, web3);
-	} else {
 		web3.eth.defaultAccount = miningKey;
 		cb(null, web3);
-	}
+	}, function(err) {
+		return finishScript(err);
+	});
 }
 
 function attachToContract(contractAddress, miningKey, retrievePayoutKeyCallBack, cb) {
