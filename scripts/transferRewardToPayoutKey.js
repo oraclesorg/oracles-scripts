@@ -10,95 +10,107 @@ var config = getConfig();
 transferRewardToPayoutKey();
 
 function transferRewardToPayoutKey() {
-	var specData = JSON.parse(fs.readFileSync(specPath, 'utf8'));
-	findKeys(specData, function(tomlData, miningKey, payoutKey) {
-		console.log("miningKey = " + miningKey);
-		console.log("payoutKey = " + payoutKey);
-		if (!miningKey || !payoutKey || payoutKey == "0x0000000000000000000000000000000000000000")
-			return console.log({code: 500, title: "Error", message: "Payout key or mining key or both are undefined"});
-		transferRewardToPayoutKeyInner(specData, tomlData, miningKey, payoutKey);
-	});
+	findKeys(findKeysCallBack);
 }
 
-function findKeys(specData, cb) {
+function findKeys(cb) {
 	var tomlDataStr = fs.readFileSync(tomlPath, 'utf8');
 
 	var tomlData = toml.parse(tomlDataStr);
 	var miningKey = tomlData.mining.engine_signer;
-	retrievePayoutKey(specData, tomlData, miningKey, function(payoutKey) {
-		cb(tomlData, miningKey, payoutKey);
+	retrievePayoutKey(miningKey, function(web3, payoutKey) {
+		cb(web3, miningKey, payoutKey);
 	});
 }
 
-function retrievePayoutKey(specData, tomlData, miningKey, cb) {
-	attachToContract(specData, tomlData, function(err, web3, contract) {
-		contract.miningPayoutKeysPair.call(miningKey, function(err, payoutKey) {
-			if (err) console.log(err);
-			cb(payoutKey);
-		});
-	});
+function findKeysCallBack(web3, miningKey, payoutKey) {
+	console.log("miningKey = " + miningKey);
+	console.log("payoutKey = " + payoutKey);
+	if (!miningKey || !payoutKey || payoutKey == "0x0000000000000000000000000000000000000000")
+		return console.log({code: 500, title: "Error", message: "Payout key or mining key or both are undefined"});
+	transferRewardToPayoutKeyTX(web3, miningKey, payoutKey);
 }
 
-function transferRewardToPayoutKeyInner(specData, tomlData, miningKey, payoutKey) {
-	configureWeb3(tomlData, function(err, web3, defaultAccount) {
-		if (err) return console.log(err);
+function retrievePayoutKey(miningKey, cb) {
+	var specData = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+	var contractAddress = specData.engine.authorityRound.params.validators.safeContract;
+	attachToContract(contractAddress, miningKey, retrievePayoutKeyCallBack, cb);
+}
 
-	  	transferRewardToPayoutKeyTX(web3, miningKey, payoutKey, function(err, result) {
-	  		if (err) {
-	  			console.log("Something went wrong with transferring reward to payout key");
-	  			console.log(err.message);
-	  			return;
-	  		}
-
-	  		console.log("Reward is sent to payout key (" + payoutKey + ") from mining key (" + miningKey + ")");
-	  	});
-  	});
-};
+function retrievePayoutKeyCallBack(err, web3, contract, miningKey, cb) {
+	if (err) return finishScript(err);
+	contract.methods.miningPayoutKeysPair(miningKey).call(function(err, payoutKey) {
+		if (err) return finishScript(err);
+		cb(web3, payoutKey);
+	});
+}
 
 function getConfig() {
 	var config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
 	return config;
 }
 
-function configureWeb3(tomlData, cb) {
+async function configureWeb3(miningKey, cb) {
 	var web3;
 	if (typeof web3 !== 'undefined') web3 = new Web3(web3.currentProvider);
 	else web3 = new Web3(new Web3.providers.HttpProvider(config.Ethereum[config.environment].rpc));
 
-	if(!web3.isConnected()) {
+	let isListening = await web3.eth.net.isListening();
+
+	if (!isListening) {
 		var err = {code: 500, title: "Error", message: "check RPC"};
 		cb(err, web3);
 	} else {
-		web3.eth.defaultAccount = tomlData.mining.engine_signer;
+		web3.eth.defaultAccount = miningKey;
 		cb(null, web3);
 	}
 }
 
-function attachToContract(specData, tomlData, cb) {
-	configureWeb3(tomlData, function(err, web3) {
-		if (err) return console.log(err);
+function attachToContract(contractAddress, miningKey, retrievePayoutKeyCallBack, cb) {
+	configureWeb3(miningKey, function(err, web3) {
+		if (err) return finishScript(err);
 
 		var contractABI = config.Ethereum.contracts.Oracles.abi;
-		var contractAddress = specData.engine.authorityRound.params.validators.safeContract;
-
-		var MyContract = web3.eth.contract(contractABI);
-
-		contract = MyContract.at(contractAddress);
+		var contractInstance = new web3.eth.Contract(contractABI, contractAddress);
 		
-		if (cb) cb(null, web3, contract);
+		if (retrievePayoutKeyCallBack) retrievePayoutKeyCallBack(null, web3, contractInstance, miningKey, cb);
 	});
 }
 
-function transferRewardToPayoutKeyTX(web3, _from, _to, cb) {
-	var balance = web3.eth.getBalance(_from).toNumber(10);
+async function transferRewardToPayoutKeyTX(web3, _from, _to) {
+	var balance = await web3.eth.getBalance(_from);
+	balance = big(balance)
+	if (balance <= 0) {
+		var err = {"code": 500, "title": "Error", "message": "Balance of mining key is empty"}
+		return finishScript(err);
+	}
 	console.log("balance from: " + balance);
-	var gasPrice = web3.eth.gasPrice;
-	console.log("gas price: " + gasPrice.toString(10));
-	var estimatedGas = web3.eth.estimateGas({from: _from, to: _to, value: balance});
+	var gasPrice = web3.utils.toWei(big('1'), 'gwei');
+	console.log("gas price: " + gasPrice);
+	var estimatedGas = big(21000);
 	console.log("estimated gas: " + estimatedGas);
-	var ammountToSend = balance - estimatedGas * gasPrice;
-	console.log("amount to transfer: " + ammountToSend);
-	web3.eth.sendTransaction({gas: estimatedGas, from: _from, to: _to, value: ammountToSend}, function(err, result) {
-		cb(err, result);
+	var amountToSend = balance.sub(estimatedGas.mul(gasPrice));
+	console.log("amount to transfer: " + amountToSend);
+	if (amountToSend <= 0) {
+		var err = {"code": 500, "title": "Error", "message": "Insufficient balance of mining key"}
+		return finishScript(err);
+	}
+
+	web3.eth.sendTransaction({gas: estimatedGas, from: _from, to: _to, value: amountToSend}, function(err, result) {
+		finishScript(err, result, _from, _to);
 	});
+
+	function big(x) {
+		return new web3.utils.BN(x);
+	}
+}
+
+function finishScript(err, result, miningKey, payoutKey) {
+	if (err) {
+		console.log("Something went wrong with transferring reward to payout key");
+		console.log(err.message);
+		return;
+	}
+
+	console.log("Reward is sent to payout key (" + payoutKey + ") from mining key (" + miningKey + ")");
 }
