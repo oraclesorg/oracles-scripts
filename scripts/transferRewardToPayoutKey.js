@@ -1,7 +1,6 @@
 var fs = require('fs');
 var Web3 = require('web3');
 var toml = require('toml');
-var BigNumber = require('bignumber.js');
 
 var tomlPath = '../node.toml';
 var specPath = '../spec.json';
@@ -40,7 +39,7 @@ function retrievePayoutKey(miningKey, cb) {
 
 function retrievePayoutKeyCallBack(err, web3, contract, miningKey, cb) {
 	if (err) return finishScript(err);
-	contract.miningPayoutKeysPair.call(miningKey, function(err, payoutKey) {
+	contract.methods.miningPayoutKeysPair(miningKey).call(function(err, payoutKey) {
 		if (err) return finishScript(err);
 		cb(web3, payoutKey);
 	});
@@ -51,12 +50,14 @@ function getConfig() {
 	return config;
 }
 
-function configureWeb3(miningKey, cb) {
+async function configureWeb3(miningKey, cb) {
 	var web3;
 	if (typeof web3 !== 'undefined') web3 = new Web3(web3.currentProvider);
 	else web3 = new Web3(new Web3.providers.HttpProvider(config.Ethereum[config.environment].rpc));
 
-	if(!web3.isConnected()) {
+	let isListening = await web3.eth.net.isListening();
+
+	if (!isListening) {
 		var err = {code: 500, title: "Error", message: "check RPC"};
 		cb(err, web3);
 	} else {
@@ -70,23 +71,23 @@ function attachToContract(contractAddress, miningKey, retrievePayoutKeyCallBack,
 		if (err) return finishScript(err);
 
 		var contractABI = config.Ethereum.contracts.Oracles.abi;
-		var Contract = web3.eth.contract(contractABI);
-		var contractInstance = Contract.at(contractAddress);
+		var contractInstance = new web3.eth.Contract(contractABI, contractAddress);
 		
 		if (retrievePayoutKeyCallBack) retrievePayoutKeyCallBack(null, web3, contractInstance, miningKey, cb);
 	});
 }
 
-function transferRewardToPayoutKeyTX(web3, _from, _to) {
-	var balance = web3.eth.getBalance(_from);
+async function transferRewardToPayoutKeyTX(web3, _from, _to) {
+	var balance = await web3.eth.getBalance(_from);
+	balance = big(balance)
 	if (balance <= 0) {
 		var err = {"code": 500, "title": "Error", "message": "Balance of mining key is empty"}
 		return finishScript(err);
 	}
 	console.log("balance from: " + balance);
-	var gasPrice = web3.toWei(1, 'gwei');
-	console.log("gas price: " + gasPrice.toString(10));
-	var estimatedGas = new BigNumber(21000);
+	var gasPrice = web3.utils.toWei(big('1'), 'gwei');
+	console.log("gas price: " + gasPrice);
+	var estimatedGas = big(21000);
 	console.log("estimated gas: " + estimatedGas);
 	var amountToSend = balance.sub(estimatedGas.mul(gasPrice));
 	console.log("amount to transfer: " + amountToSend);
@@ -98,6 +99,10 @@ function transferRewardToPayoutKeyTX(web3, _from, _to) {
 	web3.eth.sendTransaction({gas: estimatedGas, from: _from, to: _to, value: amountToSend}, function(err, result) {
 		finishScript(err, result, _from, _to);
 	});
+
+	function big(x) {
+		return new web3.utils.BN(x);
+	}
 }
 
 function finishScript(err, result, miningKey, payoutKey) {
